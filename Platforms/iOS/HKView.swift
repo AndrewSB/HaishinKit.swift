@@ -7,11 +7,11 @@ open class HKView: UIView {
     public static var defaultBackgroundColor: UIColor = .black
 
     override open class var layerClass: AnyClass {
-        AVCaptureVideoPreviewLayer.self
+        AVSampleBufferDisplayLayer.self
     }
 
-    override open var layer: AVCaptureVideoPreviewLayer {
-        super.layer as! AVCaptureVideoPreviewLayer
+    override open var layer: AVSampleBufferDisplayLayer {
+        super.layer as! AVSampleBufferDisplayLayer
     }
 
     public var videoGravity: AVLayerVideoGravity = .resizeAspect {
@@ -24,27 +24,7 @@ open class HKView: UIView {
         currentStream?.mixer.videoIO.formatDescription
     }
 
-    var orientation: AVCaptureVideoOrientation = .portrait {
-        didSet {
-            let orientationChange = { [weak self] in
-                guard let self = self else {
-                    return
-                }
-                self.layer.connection.map {
-                    if $0.isVideoOrientationSupported {
-                        $0.videoOrientation = self.orientation
-                    }
-                }
-            }
-            if Thread.isMainThread {
-                orientationChange()
-            } else {
-                DispatchQueue.main.sync {
-                    orientationChange()
-                }
-            }
-        }
-    }
+    var orientation: AVCaptureVideoOrientation = .portrait
     var position: AVCaptureDevice.Position = .front
     var currentSampleBuffer: CMSampleBuffer?
 
@@ -75,14 +55,11 @@ open class HKView: UIView {
 
     open func attachStream(_ stream: NetStream?) {
         guard let stream: NetStream = stream else {
-            layer.session?.stopRunning()
-            layer.session = nil
             currentStream = nil
             return
         }
 
         stream.mixer.session.beginConfiguration()
-        layer.session = stream.mixer.session
         orientation = stream.mixer.videoIO.orientation
         stream.mixer.session.commitConfiguration()
 
@@ -97,6 +74,15 @@ open class HKView: UIView {
 extension HKView: NetStreamRenderer {
     // MARK: NetStreamRenderer
     func enqueue(_ sampleBuffer: CMSampleBuffer?) {
+        if Thread.isMainThread {
+            if let sampleBuffer = sampleBuffer {
+                layer.enqueue(sampleBuffer)
+            }
+        } else {
+            DispatchQueue.main.async {
+                self.enqueue(sampleBuffer)
+            }
+        }
     }
 }
 
